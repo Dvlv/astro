@@ -8,56 +8,120 @@ use opengl_graphics::{GlGraphics, OpenGL};
 use piston::event_loop::*;
 use piston::input::*;
 use piston::window::{WindowSettings};
+use graphics::math::{Matrix2d};
+
+use crate::graphics::Transformed;
 
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
-    rotation: f64,  // Rotation for the square.
-    movement: f64,
-    transform: [[f64; 3]; 2],
+    ship: Ship,
+}
+
+#[derive(Debug)]
+pub struct ButtonStates {
+    left: bool,
+    right: bool,
+    up: bool,
+    a: bool,
+}
+
+pub struct Ship {
+    transform: Matrix2d,
     rot_speed: f64,
     move_speed: f64,
+
+    height: f64,
+    width: f64,
+
+    // This should probably belong to App but only the ship cares about
+    // the inputs, so meh.
+    button_states: ButtonStates,
+}
+
+impl Ship {
+    pub fn new() -> Ship {
+        // magic number from printing c.transform.
+        let s_transform = [[0.00390777647518562, 0.0, -1.0], [0.0, -0.004492362982929021, 1.0]];
+        Ship {
+            transform : s_transform.trans(256.0, 256.0),
+            rot_speed : 2.0,
+            move_speed : 60.0,
+            height: 20.0,
+            width: 16.0,
+            button_states : ButtonStates::new(),
+        }
+    }
+
+    pub fn update(&mut self, args: &UpdateArgs) {
+        if self.button_states.left && !self.button_states.right {
+            self.rotate_left(args);
+        }
+
+        else if self.button_states.right && !self.button_states.left {
+            self.rotate_right(args);
+        }
+
+        if self.button_states.up {
+            self.move_fwd(args);
+        }
+    }
+
+    pub fn get_coords(&self) -> [[f64;2]; 3] {
+        [[0.0, 0.0 - self.height/2.0],
+        [0.0 - self.width/2.0, 0.0+self.height/2.0],
+        [0.0 + self.width/2.0, 0.0+self.height/2.0]]
+    }
+
+    pub fn rotate_left(&mut self, args: &UpdateArgs) {
+        self.transform = self.transform.rot_rad(-self.rot_speed * args.dt);
+    }
+
+    pub fn rotate_right(&mut self, args: &UpdateArgs) {
+        self.transform = self.transform.rot_rad(self.rot_speed * args.dt);
+    }
+
+    pub fn move_fwd(&mut self, args: &UpdateArgs) {
+        self.transform = self.transform.trans(0.0, -self.move_speed * args.dt);
+    }
+}
+
+impl ButtonStates {
+    fn new() -> ButtonStates {
+        ButtonStates {
+            left : false,
+            right : false,
+            up : false,
+            a : false,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.left = false;
+        self.right = false;
+        self.up = false;
+        self.a = false
+    }
 }
 
 impl App {
     fn render(&mut self, args: &RenderArgs) {
         use graphics::*;
 
-        const GREEN: [f32; 4] = [0.0, 1.0, 0.0, 1.0];
+        const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
         const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
-        
-        let ship_height: f64 = 20.0;
-        let ship_base: f64 = 15.0;
-        let mid: f64 = 256.0;
-        let orig = 0.0;
 
-        let rotation = self.rotation;
-        let movement = self.movement;
-        let ship_transform = self.transform.trans(mid, mid);
+        let ship_transform = self.ship.transform;
+        let ship_triangle = self.ship.get_coords();
 
-        self.gl.draw(args.viewport(), |c, gl| {
-            // Clear the screen.
-            clear(GREEN, gl);
+        self.gl.draw(args.viewport(), |_c, gl| {
+            clear(BLACK, gl);
 
-            // Draw a box rotating around the middle of the screen.
-
-			polygon(BLUE, &[
-                    [orig, orig - ship_height/2.0],
-					[orig - ship_base/2.0, orig+ship_height/2.0],
-					[orig + ship_base/2.0, orig+ship_height/2.0]
-				], ship_transform, gl);
+            polygon(BLUE, &ship_triangle, ship_transform, gl);
         });
     }
 
-    fn rot_right(&mut self) {
-        self.rotation += self.rot_speed;
-    }
-
-    fn rot_left(&mut self) {
-        self.rotation -= self.rot_speed;
-    }
-
-    fn move_up(&mut self) {
-        self.movement += self.move_speed;
+    fn update(&mut self, args: &UpdateArgs) {
+        self.ship.update(args);
     }
 }
 
@@ -75,29 +139,44 @@ fn main() {
     // Create a new game and run it.
     let mut app = App {
         gl: GlGraphics::new(opengl),
-        rotation: 0.0,
-        movement: 0.0,
-        transform:[[0.00390777647518562, 0.0, -1.0], [0.0, -0.004492362982929021, 1.0]], 
-        rot_speed: 0.5,
-        move_speed: 0.8,
+        ship: Ship::new(),
     };
 
-    let mut events = Events::new(EventSettings::new().lazy(true));
+
+    let mut events = Events::new(EventSettings::new());
     while let Some(e) = events.next(&mut window) {
         if let Some(args) = e.render_args() {
             app.render(&args);
         }
-		 if let Some(Button::Keyboard(key)) = e.press_args() {
+        if let Some(Button::Keyboard(key)) = e.press_args() {
             if key == Key::Left {
-                app.rot_left();
+                app.ship.button_states.left = true;
             } else if key == Key::Right {
-                app.rot_right();
+                app.ship.button_states.right = true;
             }
 
             if key == Key::Up {
-                app.move_up();
+                app.ship.button_states.up = true;
             }
 
-        };
+            println!("Pressed keyboard key '{:?}'", key);
+        }
+
+        if let Some(Button::Keyboard(key)) = e.release_args() {
+            if key == Key::Left {
+                app.ship.button_states.left = false;
+            } else if key == Key::Right {
+                app.ship.button_states.right = false;
+            }
+
+            if key == Key::Up {
+                app.ship.button_states.up = false;
+            }
+
+        }
+
+        if let Some(args) = e.update_args() {
+            app.update(&args);
+        }
     }
 }
