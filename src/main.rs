@@ -9,7 +9,7 @@ use piston::event_loop::*;
 use piston::input::*;
 use piston::window::{WindowSettings};
 use graphics::math::{Matrix2d};
-use graphics::{Context, Viewport};
+use graphics::*;
 
 use std::collections::HashMap;
 use crate::graphics::Transformed;
@@ -85,6 +85,10 @@ impl Ship {
         }
     }
 
+    pub fn render(&self, gl: &mut GlGraphics) {
+        polygon([0.0, 0.0, 1.0, 1.0], &self.get_coords(), self.transform, gl);
+    }
+
     pub fn update(&mut self, args: &UpdateArgs) {
 
         // lifetimes
@@ -120,12 +124,37 @@ impl Ship {
         if self.button_states.a && self.last_shot_counter == 0.0 {
             self.shoot();
         }
+
+        let percents = self.get_percent_of_screen_moved();
+        println!("{:?}", percents);
+
+        if percents[0].abs() > 1.0  || percents[1].abs() > 1.0 {
+            self.transform = self.transform.rot_deg(180.0).flip_h().trans(0.0, -512.0).rot_deg(180.0);
+        }
+
     }
 
     pub fn get_coords(&self) -> [[f64;2]; 3] {
         [[0.0, 0.0 - self.height/2.0],
         [0.0 - self.width/2.0, 0.0+self.height/2.0],
         [0.0 + self.width/2.0, 0.0+self.height/2.0]]
+    }
+
+    pub fn get_percent_of_screen_moved(&self) -> [f64; 2] {
+        let t = self.transform;
+        let mut cm = vec![];
+        let top_p = self.get_coords()[0];
+        cm.push(top_p[0]);
+        cm.push(top_p[1] * -1.0);
+        cm.push(1.0);
+
+        let div = [
+            t[0][0] * cm[0] + t[0][1] * cm[1] + t[0][2],
+            t[1][0] * cm[0] + t[1][1] * cm[1] + t[1][2],
+        ];
+
+        div
+
     }
 
     pub fn rotate_left(&mut self, args: &UpdateArgs) {
@@ -184,7 +213,6 @@ impl ButtonStates {
 
 impl App {
     fn render(&mut self, args: &RenderArgs) {
-        use graphics::*;
 
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
         const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
@@ -194,6 +222,7 @@ impl App {
         let ship_triangle = self.ship.get_coords();
 
         let bullet_positions: Vec<&Bullet> = self.ship.bullets.iter().map(|(_, bul)| bul).collect();
+        self.ship.render(&mut self.gl);
 
         self.gl.draw(args.viewport(), |_c, gl| {
             clear(BLACK, gl);
@@ -205,7 +234,6 @@ impl App {
                 }
             }
 
-            polygon(BLUE, &ship_triangle, ship_transform, gl);
         });
     }
 
