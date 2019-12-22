@@ -12,6 +12,7 @@ use graphics::math::{Matrix2d};
 use graphics::*;
 
 use std::collections::HashMap;
+use std::cmp;
 use crate::graphics::Transformed;
 
 pub struct App {
@@ -45,6 +46,7 @@ pub struct Ship {
     transform: Matrix2d,
     rot_speed: f64,
     move_speed: f64,
+    rotation: f64,
 
     height: f64,
     width: f64,
@@ -74,7 +76,8 @@ impl Ship {
         Ship {
             transform: s_transform.trans(win_width as f64 / 2.0, win_height as f64 / 2.0),
             rot_speed: 2.0,
-            move_speed: 60.0,
+            move_speed: 120.0,
+            rotation: 0.0,
             height: 20.0,
             width: 16.0,
             shoot_cooldown: 3.0,
@@ -126,11 +129,42 @@ impl Ship {
         }
 
         let percents = self.get_percent_of_screen_moved();
-        println!("{:?}", percents);
 
-        if percents[0].abs() > 1.0  || percents[1].abs() > 1.0 {
-            self.transform = self.transform.rot_deg(180.0).flip_h().trans(0.0, -512.0).rot_deg(180.0);
+        if percents[1].abs() > 1.0{
+            self.emerge_other_side(&percents, 1.0, 1.0);
+        } else if percents[0].abs() > 1.0 {
+            self.emerge_other_side(&percents, -1.0, -1.0)
         }
+
+    }
+    pub fn emerge_other_side(&mut self, percents: &[f64; 2], x_mod: f64, y_mod: f64) {
+        let viewport = Viewport {
+            rect: [0, 0, 512, 512],
+            draw_size: [512 as u32, 512 as u32],
+            window_size: [512.0, 512.0],
+        };
+
+        let t = Context::new_viewport(viewport).transform;
+        let mut y_pos = y_mod * 255.0 * percents[1];
+        let mut x_pos = x_mod * 255.0 * percents[0];
+
+        let max_screen_move = 255 - cmp::max(self.height as i64, self.width as i64);
+        let max_s_move_up = max_screen_move * -1;
+
+        // clamp doesnt work =/
+        if y_pos < max_s_move_up as f64 {
+            y_pos = max_s_move_up as f64;
+        } else if y_pos > max_screen_move as f64 {
+            y_pos = max_screen_move as f64;
+        }
+
+        if x_pos < max_s_move_up as f64 {
+            x_pos = max_s_move_up as f64;
+        } else if x_pos > max_screen_move as f64 {
+            x_pos = max_screen_move as f64;
+        }
+
+        self.transform = t.trans(255.0, 255.0).trans(x_pos, y_pos).rot_rad(self.rotation);
 
     }
 
@@ -158,10 +192,12 @@ impl Ship {
     }
 
     pub fn rotate_left(&mut self, args: &UpdateArgs) {
+        self.rotation -= self.rot_speed * args.dt;
         self.transform = self.transform.rot_rad(-self.rot_speed * args.dt);
     }
 
     pub fn rotate_right(&mut self, args: &UpdateArgs) {
+        self.rotation += self.rot_speed * args.dt;
         self.transform = self.transform.rot_rad(self.rot_speed * args.dt);
     }
 
@@ -283,7 +319,6 @@ fn main() {
                 app.ship.button_states.a = true;
             }
 
-            println!("Pressed keyboard key '{:?}'", key);
         }
 
         if let Some(Button::Keyboard(key)) = e.release_args() {
