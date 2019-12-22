@@ -37,8 +37,13 @@ pub struct Bullet {
 
 impl Bullet {
     pub fn update(&mut self, args: &UpdateArgs) {
-        self.transform = self.transform.trans(0.0, -1.0);
+        self.transform = self.transform.trans(0.0, -5.0);
         self.lifetime += args.dt;
+    }
+
+    pub fn render(&self, gl: &mut GlGraphics) {
+        let rect = [10.0, 10.0, 10.0, 10.0];
+        ellipse([1.0, 0.0, 0.0, 1.0], rect, self.transform, gl);
     }
 }
 
@@ -206,7 +211,12 @@ impl Ship {
     }
 
     pub fn shoot(&mut self) {
-        let new_bullet = Bullet {id: self.next_bullet_id, transform: self.transform, lifetime: 0.0};
+        let new_bullet = Bullet {
+            id: self.next_bullet_id,
+            transform: self.transform.trans(-self.width, -self.height),
+            lifetime: 0.0
+        };
+
         self.bullets.insert(new_bullet.id, new_bullet);
         self.next_bullet_id += 1;
 
@@ -217,8 +227,9 @@ impl Ship {
         let mut bullets_to_remove: Vec<i64> = vec![];
 
         for (_, bullet) in &mut self.bullets {
-            if bullet.lifetime >= 3.0 {
+            if bullet.lifetime >= 1.2 {
                 bullets_to_remove.push(bullet.id);
+                self.last_shot_counter = 0.0;
             }
         }
 
@@ -251,25 +262,18 @@ impl App {
     fn render(&mut self, args: &RenderArgs) {
 
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
-        const BLUE: [f32; 4] = [0.0, 0.0, 1.0, 1.0];
-        const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
 
         let ship_transform = self.ship.transform;
         let ship_triangle = self.ship.get_coords();
 
-        let bullet_positions: Vec<&Bullet> = self.ship.bullets.iter().map(|(_, bul)| bul).collect();
+        clear(BLACK, &mut self.gl);
         self.ship.render(&mut self.gl);
+        let bullet_positions: Vec<&Bullet> = self.ship.bullets.iter().map(|(_, bul)| bul).collect();
+        for bullet in bullet_positions {
+            bullet.render(&mut self.gl);
+        }
 
         self.gl.draw(args.viewport(), |_c, gl| {
-            clear(BLACK, gl);
-
-            if bullet_positions.len() > 0 {
-                for bullet in bullet_positions {
-                    let rect = [10.0, 10.0, 10.0, 10.0];
-                    ellipse(RED, rect, bullet.transform, gl);
-                }
-            }
-
         });
     }
 
