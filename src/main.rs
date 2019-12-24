@@ -15,6 +15,26 @@ use std::collections::HashMap;
 use std::cmp;
 use crate::graphics::Transformed;
 
+pub trait Positioned {
+    fn position_point(&self) -> [f64; 2];
+    fn transform_matrix(&self) -> Matrix2d;
+
+    fn get_position(&self) -> [f64; 2]{
+        let t = self.transform_matrix();
+        let mut cm = vec![];
+        cm.push(self.position_point()[0]);
+        cm.push(self.position_point()[1] * -1.0);
+        cm.push(1.0);
+
+        let div = [
+            t[0][0] * cm[0] + t[0][1] * cm[1] + t[0][2],
+            t[1][0] * cm[0] + t[1][1] * cm[1] + t[1][2],
+        ];
+
+        [(512.0 - (512.0 - (div[0] * 512.0)) / 2.0), (512.0 - (512.0 - (div[1] * 512.0)) / 2.0)]
+    }
+}
+
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
     ship: Ship,
@@ -28,7 +48,29 @@ pub struct App {
 #[derive(Debug)]
 pub struct Asteroid {
     id: i64,
-    trabsform: Matrix2d,
+    transform: Matrix2d,
+}
+
+impl Asteroid {
+    pub fn update(&mut self, args: &UpdateArgs) {
+        self.transform = self.transform.trans(0.0, -5.0);
+    }
+
+    pub fn render(&self, gl: &mut GlGraphics) {
+        let rect = [10.0, 10.0, 100.0, 100.0];
+        ellipse([0.0, 1.0, 0.0, 1.0], rect, self.transform, gl);
+    }
+
+}
+
+impl Positioned for Asteroid {
+    fn position_point(&self) -> [f64; 2] {
+        [10.0, 10.0]
+    }
+
+    fn transform_matrix(&self) -> Matrix2d {
+        self.transform
+    }
 }
 
 #[derive(Debug)]
@@ -53,8 +95,18 @@ impl Bullet {
     }
 
     pub fn render(&self, gl: &mut GlGraphics) {
-        let rect = [10.0, 10.0, 10.0, 10.0];
+        let rect = [0.0, 0.0, 10.0, 10.0];
         ellipse([1.0, 0.0, 0.0, 1.0], rect, self.transform, gl);
+    }
+}
+
+impl Positioned for Bullet {
+    fn position_point(&self) -> [f64; 2] {
+        [0.0, 0.0]
+    }
+
+    fn transform_matrix(&self) -> Matrix2d {
+        self.transform
     }
 }
 
@@ -110,11 +162,13 @@ impl Ship {
             }
         }
 
-        let percents = self.get_percent_of_screen_moved();
+        let pos = self.get_position();
 
-        if percents[1].abs() > 1.0{
+        if pos[1] > 512.0 || pos[1] < 0.0 {
+            let percents = self.get_percent_of_screen_moved();
             self.emerge_other_side(&percents, 1.0, 1.0);
-        } else if percents[0].abs() > 1.0 {
+        } else if pos[0] > 512.0 || pos[0] < 0.0 {
+            let percents = self.get_percent_of_screen_moved();
             self.emerge_other_side(&percents, -1.0, -1.0)
         }
 
@@ -127,10 +181,10 @@ impl Ship {
         };
 
         let t = Context::new_viewport(viewport).transform;
-        let mut y_pos = y_mod * 255.0 * percents[1];
-        let mut x_pos = x_mod * 255.0 * percents[0];
+        let mut y_pos = y_mod * 256.0 * percents[1];
+        let mut x_pos = x_mod * 256.0 * percents[0];
 
-        let max_screen_move = 255 - cmp::max(self.height as i64, self.width as i64);
+        let max_screen_move = 256 - cmp::max((self.height/2.0) as i64, (self.width/2.0) as i64);
         let max_s_move_up = max_screen_move * -1;
 
         // clamp doesnt work =/
@@ -146,7 +200,7 @@ impl Ship {
             x_pos = max_screen_move as f64;
         }
 
-        self.transform = t.trans(255.0, 255.0).trans(x_pos, y_pos).rot_rad(self.rotation);
+        self.transform = t.trans(256.0, 256.0).trans(x_pos, y_pos).rot_rad(self.rotation);
 
     }
 
@@ -188,6 +242,16 @@ impl Ship {
     }
 }
 
+impl Positioned for Ship {
+    fn position_point(&self) -> [f64; 2] {
+        [0.0, 0.0]
+    }
+
+    fn transform_matrix(&self) -> Matrix2d {
+        self.transform
+    }
+}
+
 impl ButtonStates {
     fn new() -> ButtonStates {
         ButtonStates {
@@ -211,7 +275,11 @@ impl App {
         let mut bullets_to_remove: Vec<i64> = vec![];
 
         for (_, bullet) in &mut self.bullets {
-            if bullet.lifetime >= 1.2 {
+            let bullet_pos = bullet.get_position();
+            if bullet_pos[0] > 512.0 || bullet_pos[0] < 0.0 || bullet_pos[1] > 512.0 || bullet_pos[1] < 0.0 {
+                bullets_to_remove.push(bullet.id);
+                self.ship.last_shot_counter = 0.0;
+            } else if bullet.lifetime >= 1.2 {
                 bullets_to_remove.push(bullet.id);
                 self.ship.last_shot_counter = 0.0;
             }
@@ -226,7 +294,7 @@ impl App {
     pub fn shoot(&mut self) {
         let new_bullet = Bullet {
             id: self.next_bullet_id,
-            transform: self.ship.transform.trans(-self.ship.width, -self.ship.height),
+            transform: self.ship.transform.trans(-self.ship.width/2.0, -self.ship.height/2.0),
             lifetime: 0.0
         };
 
@@ -234,6 +302,16 @@ impl App {
         self.next_bullet_id += 1;
 
         self.ship.last_shot_counter = self.ship.shoot_cooldown;
+    }
+
+    pub fn add_asteroids(&mut self, t: Matrix2d) {
+        let new_ast = Asteroid {
+            id: self.next_asteroid_id,
+            transform: t,
+        };
+
+        self.asteroids.insert(self.next_asteroid_id, new_ast);
+        self.next_asteroid_id += 1;
     }
 
     fn render(&mut self, args: &RenderArgs) {
@@ -249,10 +327,17 @@ impl App {
             bullet.render(&mut self.gl);
         }
 
+        let asteroid_positions: Vec<&Asteroid> = self.asteroids.iter().map(|(_, ast)| ast).collect();
+        for aster in asteroid_positions {
+            aster.render(&mut self.gl);
+        }
+
         self.gl.draw(args.viewport(), |_c, gl| {});
     }
 
     fn update(&mut self, args: &UpdateArgs) {
+
+        self.cull_expired_bullets();
 
         // user input
         if self.button_states.left && !self.button_states.right {
@@ -267,7 +352,7 @@ impl App {
             self.ship.move_fwd(args);
         }
 
-        if self.button_states.a && self.ship.last_shot_counter == 0.0 {
+        if self.button_states.a && self.ship.last_shot_counter <= 0.0 {
             self.shoot();
         }
 
@@ -278,7 +363,6 @@ impl App {
             bullet.update(args);
         }
 
-        self.cull_expired_bullets();
     }
 }
 
@@ -307,6 +391,14 @@ fn main() {
         button_states: ButtonStates::new(),
     };
 
+    let viewport = Viewport {
+        rect: [0, 0, win_width, win_height],
+        draw_size: [win_width as u32, win_height as u32],
+        window_size: [win_width as f64, win_height as f64],
+    };
+    let c = Context::new_viewport(viewport);
+
+    app.add_asteroids(c.transform);
 
     let mut events = Events::new(EventSettings::new());
     while let Some(e) = events.next(&mut window) {
