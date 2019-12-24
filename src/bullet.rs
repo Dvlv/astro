@@ -1,7 +1,9 @@
-use graphics::*;
-use piston::input::UpdateArgs;
+use crate::graphics::Transformed;
+
+use graphics::ellipse;
 use graphics::math::Matrix2d;
 use opengl_graphics::GlGraphics;
+use piston::input::UpdateArgs;
 use super::positioned::Positioned;
 
 #[derive(Debug)]

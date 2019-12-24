@@ -1,4 +1,4 @@
-use graphics::math::{Matrix2d};
+use graphics::math::Matrix2d;
 
 pub trait Positioned {
     fn position_point(&self) -> [f64; 2];

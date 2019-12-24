@@ -1,8 +1,12 @@
+use crate::graphics::Transformed;
+
 use std::cmp;
-use graphics::*;
-use piston::input::UpdateArgs;
+
+use graphics::polygon;
+use graphics::{Viewport, Context};
 use graphics::math::Matrix2d;
 use opengl_graphics::GlGraphics;
+use piston::input::UpdateArgs;
 use super::positioned::Positioned;
 
 
