@@ -18,6 +18,17 @@ use crate::graphics::Transformed;
 pub struct App {
     gl: GlGraphics, // OpenGL drawing backend.
     ship: Ship,
+    bullets: HashMap<i64, Bullet>,
+    next_bullet_id: i64,
+    asteroids: HashMap<i64, Asteroid>,
+    next_asteroid_id: i64,
+    button_states: ButtonStates,
+}
+
+#[derive(Debug)]
+pub struct Asteroid {
+    id: i64,
+    trabsform: Matrix2d,
 }
 
 #[derive(Debug)]
@@ -56,15 +67,8 @@ pub struct Ship {
     height: f64,
     width: f64,
 
-    next_bullet_id: i64,
-    bullets: HashMap<i64, Bullet>,
-
     shoot_cooldown: f64,
     last_shot_counter: f64,
-
-    // This should probably belong to App but only the ship cares about
-    // the inputs, so meh.
-    button_states: ButtonStates,
 }
 
 impl Ship {
@@ -87,9 +91,6 @@ impl Ship {
             width: 16.0,
             shoot_cooldown: 3.0,
             last_shot_counter: 0.0,
-            next_bullet_id: 0,
-            bullets: HashMap::new(),
-            button_states: ButtonStates::new(),
         }
     }
 
@@ -107,30 +108,6 @@ impl Ship {
             if self.last_shot_counter < 0.0 {
                 self.last_shot_counter = 0.0;
             }
-        }
-
-        self.cull_expired_bullets();
-
-        // existing bullets
-        for (_, bullet) in &mut self.bullets {
-            bullet.update(args);
-        }
-
-        // user input
-        if self.button_states.left && !self.button_states.right {
-            self.rotate_left(args);
-        }
-
-        else if self.button_states.right && !self.button_states.left {
-            self.rotate_right(args);
-        }
-
-        if self.button_states.up {
-            self.move_fwd(args);
-        }
-
-        if self.button_states.a && self.last_shot_counter == 0.0 {
-            self.shoot();
         }
 
         let percents = self.get_percent_of_screen_moved();
@@ -209,37 +186,8 @@ impl Ship {
     pub fn move_fwd(&mut self, args: &UpdateArgs) {
         self.transform = self.transform.trans(0.0, -self.move_speed * args.dt);
     }
-
-    pub fn shoot(&mut self) {
-        let new_bullet = Bullet {
-            id: self.next_bullet_id,
-            transform: self.transform.trans(-self.width, -self.height),
-            lifetime: 0.0
-        };
-
-        self.bullets.insert(new_bullet.id, new_bullet);
-        self.next_bullet_id += 1;
-
-        self.last_shot_counter = self.shoot_cooldown;
-    }
-
-    pub fn cull_expired_bullets(&mut self) {
-        let mut bullets_to_remove: Vec<i64> = vec![];
-
-        for (_, bullet) in &mut self.bullets {
-            if bullet.lifetime >= 1.2 {
-                bullets_to_remove.push(bullet.id);
-                self.last_shot_counter = 0.0;
-            }
-        }
-
-        for bullet_id in bullets_to_remove {
-            self.bullets.remove(&bullet_id);
-        }
-
-    }
-
 }
+
 impl ButtonStates {
     fn new() -> ButtonStates {
         ButtonStates {
@@ -259,26 +207,78 @@ impl ButtonStates {
 }
 
 impl App {
+    pub fn cull_expired_bullets(&mut self) {
+        let mut bullets_to_remove: Vec<i64> = vec![];
+
+        for (_, bullet) in &mut self.bullets {
+            if bullet.lifetime >= 1.2 {
+                bullets_to_remove.push(bullet.id);
+                self.ship.last_shot_counter = 0.0;
+            }
+        }
+
+        for bullet_id in bullets_to_remove {
+            self.bullets.remove(&bullet_id);
+        }
+
+    }
+
+    pub fn shoot(&mut self) {
+        let new_bullet = Bullet {
+            id: self.next_bullet_id,
+            transform: self.ship.transform.trans(-self.ship.width, -self.ship.height),
+            lifetime: 0.0
+        };
+
+        self.bullets.insert(new_bullet.id, new_bullet);
+        self.next_bullet_id += 1;
+
+        self.ship.last_shot_counter = self.ship.shoot_cooldown;
+    }
+
     fn render(&mut self, args: &RenderArgs) {
 
         const BLACK: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
 
-        let ship_transform = self.ship.transform;
-        let ship_triangle = self.ship.get_coords();
-
         clear(BLACK, &mut self.gl);
+
         self.ship.render(&mut self.gl);
-        let bullet_positions: Vec<&Bullet> = self.ship.bullets.iter().map(|(_, bul)| bul).collect();
+
+        let bullet_positions: Vec<&Bullet> = self.bullets.iter().map(|(_, bul)| bul).collect();
         for bullet in bullet_positions {
             bullet.render(&mut self.gl);
         }
 
-        self.gl.draw(args.viewport(), |_c, gl| {
-        });
+        self.gl.draw(args.viewport(), |_c, gl| {});
     }
 
     fn update(&mut self, args: &UpdateArgs) {
+
+        // user input
+        if self.button_states.left && !self.button_states.right {
+            self.ship.rotate_left(args);
+        }
+
+        else if self.button_states.right && !self.button_states.left {
+            self.ship.rotate_right(args);
+        }
+
+        if self.button_states.up {
+            self.ship.move_fwd(args);
+        }
+
+        if self.button_states.a && self.ship.last_shot_counter == 0.0 {
+            self.shoot();
+        }
+
         self.ship.update(args);
+
+        // existing bullets
+        for (_, bullet) in &mut self.bullets {
+            bullet.update(args);
+        }
+
+        self.cull_expired_bullets();
     }
 }
 
@@ -300,6 +300,11 @@ fn main() {
     let mut app = App {
         gl: GlGraphics::new(opengl),
         ship: Ship::new(win_width, win_height),
+        bullets: HashMap::new(),
+        next_bullet_id: 0,
+        asteroids: HashMap::new(),
+        next_asteroid_id: 0,
+        button_states: ButtonStates::new(),
     };
 
 
@@ -310,34 +315,34 @@ fn main() {
         }
         if let Some(Button::Keyboard(key)) = e.press_args() {
             if key == Key::Left {
-                app.ship.button_states.left = true;
+                app.button_states.left = true;
             } else if key == Key::Right {
-                app.ship.button_states.right = true;
+                app.button_states.right = true;
             }
 
             if key == Key::Up {
-                app.ship.button_states.up = true;
+                app.button_states.up = true;
             }
 
             if key == Key::A {
-                app.ship.button_states.a = true;
+                app.button_states.a = true;
             }
 
         }
 
         if let Some(Button::Keyboard(key)) = e.release_args() {
             if key == Key::Left {
-                app.ship.button_states.left = false;
+                app.button_states.left = false;
             } else if key == Key::Right {
-                app.ship.button_states.right = false;
+                app.button_states.right = false;
             }
 
             if key == Key::Up {
-                app.ship.button_states.up = false;
+                app.button_states.up = false;
             }
 
             if key == Key::A {
-                app.ship.button_states.a = false;
+                app.button_states.a = false;
             }
 
         }
