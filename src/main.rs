@@ -99,7 +99,10 @@ impl App {
     pub fn add_asteroids(&mut self, t: Matrix2d) {
         let new_ast = Asteroid {
             id: self.next_asteroid_id,
-            transform: t,
+            transform: t.trans(50.0, 50.0),
+            width: 100.0,
+            height: 100.0,
+            velocity: [0.5, 0.3],
         };
 
         self.asteroids.insert(self.next_asteroid_id, new_ast);
@@ -151,6 +154,11 @@ impl App {
         // existing bullets
         for (_, bullet) in &mut self.bullets {
             bullet.update(args);
+        }
+
+        // existing asteroids
+        for (_, a) in &mut self.asteroids {
+            a.update(args);
         }
 
     }
