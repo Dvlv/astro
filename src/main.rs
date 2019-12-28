@@ -60,6 +60,7 @@ pub struct App {
     asteroids: HashMap<i64, Asteroid>,
     next_asteroid_id: i64,
     button_states: ButtonStates,
+    has_collided:  bool,
 }
 
 impl App {
@@ -97,7 +98,7 @@ impl App {
     }
 
     pub fn add_asteroids(&mut self, t: Matrix2d) {
-        let new_ast = Asteroid {
+        let mut new_ast = Asteroid {
             id: self.next_asteroid_id,
             transform: t.trans(50.0, 50.0),
             width: 100.0,
@@ -114,18 +115,44 @@ impl App {
         clear([0.0, 0.0, 0.0, 1.0], &mut self.gl);
 
         let asteroid_positions: Vec<&Asteroid> = self.asteroids.iter().map(|(_, ast)| ast).collect();
-        for aster in asteroid_positions {
-            aster.render(&mut self.gl);
+        let mut asteroid_bounds: Vec<[f64; 4]> = vec![];
+
+        for a in asteroid_positions {
+            a.render(&mut self.gl);
+            let a_pos = a.get_position();
+            let bounds = [
+                a_pos[0] - a.width/2.0,
+                a_pos[1] - a.height/2.0,
+                a_pos[0] + a.width/2.0,
+                a_pos[1] + a.height/2.0
+            ];
+            asteroid_bounds.push(bounds);
         }
 
         let bullet_positions: Vec<&Bullet> = self.bullets.iter().map(|(_, bul)| bul).collect();
-        for bullet in bullet_positions {
+        for bullet in &bullet_positions {
             bullet.render(&mut self.gl);
         }
 
         self.ship.render(&mut self.gl);
 
         self.gl.draw(args.viewport(), |_, _| {});
+        
+        if !self.has_collided {
+
+        for bullet in & bullet_positions {
+            let bullet_pos = bullet.get_position();
+            for bound in &asteroid_bounds {
+                if bullet_pos[0] > bound[0] && bullet_pos[0] < bound[2] {
+                    if bullet_pos[1] > bound[1] && bullet_pos[1] < bound[3] {
+                        println!("colliding! {:?}, b {:?}", bound, bullet_pos);
+                        self.has_collided = true;
+                    }
+                }
+            }
+        }
+        }
+
     }
 
     fn update(&mut self, args: &UpdateArgs) {
@@ -151,15 +178,21 @@ impl App {
 
         self.ship.update(args);
 
-        // existing bullets
-        for (_, bullet) in &mut self.bullets {
-            bullet.update(args);
+
+        if !self.has_collided {
+        // existing asteroids
+            for (_, a) in &mut self.asteroids {
+                a.update(args);
+            }
+
+            // existing bullets
+            for (_, bullet) in &mut self.bullets {
+                bullet.update(args);
+            
+            }
         }
 
-        // existing asteroids
-        for (_, a) in &mut self.asteroids {
-            a.update(args);
-        }
+
 
     }
 }
@@ -187,6 +220,7 @@ fn main() {
         asteroids: HashMap::new(),
         next_asteroid_id: 0,
         button_states: ButtonStates::new(),
+        has_collided: false,
     };
 
     let viewport = Viewport {

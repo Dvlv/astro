@@ -15,7 +15,7 @@ pub struct Bullet {
 
 impl Bullet {
     pub fn update(&mut self, args: &UpdateArgs) {
-        self.transform = self.transform.trans(0.0, -5.0);
+        self.transform = self.transform.trans(0.0, -1.0);
         self.lifetime += args.dt;
     }
 
@@ -27,7 +27,7 @@ impl Bullet {
 
 impl Positioned for Bullet {
     fn position_point(&self) -> [f64; 2] {
-        [0.0, 0.0]
+        [5.0, 5.0]
     }
 
     fn transform_matrix(&self) -> Matrix2d {

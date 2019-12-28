@@ -18,7 +18,7 @@ pub struct Asteroid {
 
 impl Asteroid {
     pub fn update(&mut self, _args: &UpdateArgs) {
-        self.transform = self.transform.trans(self.velocity[0], self.velocity[1]);
+        //self.transform = self.transform.trans(self.velocity[0], self.velocity[1]);
 
         let current_pos = self.get_position();
         let x_max = 512.0;
@@ -37,8 +37,8 @@ impl Asteroid {
 
     pub fn render(&self, gl: &mut GlGraphics) {
         let rect = [
-            0.0 - self.width/2.0,
-            0.0 - self.height/2.0,
+            -self.width/2.0,
+            -self.height/2.0,
             self.width/2.0,
             self.height/2.0];
         ellipse([0.0, 1.0, 0.0, 1.0], rect, self.transform, gl);
