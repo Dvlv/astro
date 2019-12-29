@@ -115,18 +115,14 @@ impl App {
         clear([0.0, 0.0, 0.0, 1.0], &mut self.gl);
 
         let asteroid_positions: Vec<&Asteroid> = self.asteroids.iter().map(|(_, ast)| ast).collect();
-        let mut asteroid_bounds: Vec<[f64; 4]> = vec![];
+        let mut asteroid_bounds: Vec<[f64; 3]> = vec![];
 
         for a in asteroid_positions {
             a.render(&mut self.gl);
             let a_pos = a.get_position();
-            let bounds = [
-                a_pos[0] - a.width/2.0,
-                a_pos[1] - a.height/2.0,
-                a_pos[0] + a.width/2.0,
-                a_pos[1] + a.height/2.0
-            ];
-            asteroid_bounds.push(bounds);
+            let a_rad = a.width/2.0;
+            let a_info = [a_pos[0], a_pos[1], a_rad];
+            asteroid_bounds.push(a_info);
         }
 
         let bullet_positions: Vec<&Bullet> = self.bullets.iter().map(|(_, bul)| bul).collect();
@@ -137,20 +133,22 @@ impl App {
         self.ship.render(&mut self.gl);
 
         self.gl.draw(args.viewport(), |_, _| {});
-        
+
         if !self.has_collided {
 
-        for bullet in & bullet_positions {
-            let bullet_pos = bullet.get_position();
-            for bound in &asteroid_bounds {
-                if bullet_pos[0] > bound[0] && bullet_pos[0] < bound[2] {
-                    if bullet_pos[1] > bound[1] && bullet_pos[1] < bound[3] {
-                        println!("colliding! {:?}, b {:?}", bound, bullet_pos);
+            for bullet in & bullet_positions {
+                let bullet_pos = bullet.get_position();
+                for bound in &asteroid_bounds {
+                    let dx = bullet_pos[0] - bound[0];
+                    let dy = bullet_pos[1] - bound[1];
+                    let c_squared = dx * dx + dy * dy;
+                    let dist_to_center = c_squared.sqrt();
+                    if dist_to_center < bound[2] + 5.0 {  // 5.0 is half bullet width
+                        println!("collision {:?}", bullet_pos);
                         self.has_collided = true;
                     }
                 }
             }
-        }
         }
 
     }

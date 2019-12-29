@@ -15,7 +15,7 @@ pub struct Bullet {
 
 impl Bullet {
     pub fn update(&mut self, args: &UpdateArgs) {
-        self.transform = self.transform.trans(0.0, -1.0);
+        self.transform = self.transform.trans(0.0, -3.0);
         self.lifetime += args.dt;
     }
 
