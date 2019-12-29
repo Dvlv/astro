@@ -27,7 +27,7 @@ impl Bullet {
 
 impl Positioned for Bullet {
     fn position_point(&self) -> [f64; 2] {
-        [5.0, 5.0]
+        [5.0, -5.0]
     }
 
     fn transform_matrix(&self) -> Matrix2d {

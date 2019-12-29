@@ -37,10 +37,9 @@ impl Asteroid {
 
     pub fn render(&self, gl: &mut GlGraphics) {
         let rect = [
-            -self.width/2.0,
-            -self.height/2.0,
-            self.width/2.0,
-            self.height/2.0];
+            0.0, 0.0,
+            self.width, self.height,
+        ];
         ellipse([0.0, 1.0, 0.0, 1.0], rect, self.transform, gl);
     }
 
@@ -48,7 +47,7 @@ impl Asteroid {
 
 impl Positioned for Asteroid {
     fn position_point(&self) -> [f64; 2] {
-        [0.0, 0.0]
+        [self.width/2.0, -self.height/2.0]
     }
 
     fn transform_matrix(&self) -> Matrix2d {

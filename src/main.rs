@@ -98,7 +98,7 @@ impl App {
     }
 
     pub fn add_asteroids(&mut self, t: Matrix2d) {
-        let mut new_ast = Asteroid {
+        let new_ast = Asteroid {
             id: self.next_asteroid_id,
             transform: t.trans(50.0, 50.0),
             width: 100.0,
