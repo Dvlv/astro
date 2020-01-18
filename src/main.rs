@@ -2,6 +2,9 @@ extern crate glutin_window;
 extern crate graphics;
 extern crate opengl_graphics;
 extern crate piston;
+extern crate rand;
+
+use rand::Rng;
 
 use std::collections::HashMap;
 
@@ -18,6 +21,7 @@ use positioned::Positioned;
 
 mod asteroid;
 use asteroid::Asteroid;
+use asteroid::AsteroidStats;
 
 mod bullet;
 use bullet::Bullet;
@@ -61,6 +65,8 @@ pub struct App {
     next_asteroid_id: i64,
     button_states: ButtonStates,
     has_collided:  bool,
+    bullets_to_remove: Vec<i64>,
+    asteroids_to_remove: Vec<i64>,
 }
 
 impl App {
@@ -84,6 +90,53 @@ impl App {
 
     }
 
+    pub fn cull_collided_objects(&mut self) {
+        for bullet_id in &self.bullets_to_remove {
+            if self.bullets.contains_key(&bullet_id) {
+                self.bullets.remove(&bullet_id);
+                self.ship.last_shot_counter = 0.0;
+            }
+        }
+
+        let mut new_asteroids: Vec<AsteroidStats> = vec![];
+
+        for asteroid_id in self.asteroids_to_remove.iter() {
+            if self.asteroids.contains_key(&asteroid_id) {
+                let killed_asteroid = &self.asteroids[&asteroid_id];
+                let new_width = killed_asteroid.width / 2.0;
+                let new_height = killed_asteroid.height / 2.0;
+
+                if new_width > 24.0 && new_height > 24.0 {
+                    new_asteroids.push(
+                        AsteroidStats {
+                            transform: killed_asteroid.transform.trans(-new_width, 0.0),
+                            width: new_width,
+                            height: new_height,
+                        }
+                    );
+
+                    new_asteroids.push(
+                        AsteroidStats {
+                            transform: killed_asteroid.transform.trans(new_width, 0.0),
+                            width: new_width,
+                            height: new_height,
+                        }
+                    );
+
+                }
+
+                self.asteroids.remove(&asteroid_id);
+            }
+        }
+
+        self.asteroids_to_remove = vec![];
+
+        for asteroid in new_asteroids {
+            self.add_asteroids(&asteroid);
+        }
+
+    }
+
     pub fn shoot(&mut self) {
         let new_bullet = Bullet {
             id: self.next_bullet_id,
@@ -97,13 +150,17 @@ impl App {
         self.ship.last_shot_counter = self.ship.shoot_cooldown;
     }
 
-    pub fn add_asteroids(&mut self, t: Matrix2d) {
+    pub fn add_asteroids(&mut self, stats: &AsteroidStats) {
+        let mut rng = rand::thread_rng();
+        let rand_x_vel = rng.gen_range(0.2, 0.8);
+        let rand_y_vel = rng.gen_range(0.2, 0.8);
+
         let new_ast = Asteroid {
             id: self.next_asteroid_id,
-            transform: t.trans(50.0, 50.0),
-            width: 100.0,
-            height: 100.0,
-            velocity: [0.5, 0.3],
+            transform: stats.transform,
+            width: stats.width,
+            height: stats.height,
+            velocity: [rand_x_vel, rand_y_vel],
         };
 
         self.asteroids.insert(self.next_asteroid_id, new_ast);
@@ -114,10 +171,10 @@ impl App {
 
         clear([0.0, 0.0, 0.0, 1.0], &mut self.gl);
 
-        let asteroid_positions: Vec<&Asteroid> = self.asteroids.iter().map(|(_, ast)| ast).collect();
+        let asteroids: Vec<&Asteroid> = self.asteroids.iter().map(|(_, ast)| ast).collect();
         let mut asteroid_bounds: Vec<[f64; 3]> = vec![];
 
-        for a in asteroid_positions {
+        for a in &asteroids {
             a.render(&mut self.gl);
             let a_pos = a.get_position();
             let a_rad = a.width/2.0;
@@ -125,8 +182,8 @@ impl App {
             asteroid_bounds.push(a_info);
         }
 
-        let bullet_positions: Vec<&Bullet> = self.bullets.iter().map(|(_, bul)| bul).collect();
-        for bullet in &bullet_positions {
+        let bullets: Vec<&Bullet> = self.bullets.iter().map(|(_, bul)| bul).collect();
+        for bullet in &bullets {
             bullet.render(&mut self.gl);
         }
 
@@ -134,28 +191,26 @@ impl App {
 
         self.gl.draw(args.viewport(), |_, _| {});
 
-        if !self.has_collided {
-
-            for bullet in & bullet_positions {
-                let bullet_pos = bullet.get_position();
-                for bound in &asteroid_bounds {
-                    let dx = bullet_pos[0] - bound[0];
-                    let dy = bullet_pos[1] - bound[1];
-                    let c_squared = dx * dx + dy * dy;
-                    let dist_to_center = c_squared.sqrt();
-                    if dist_to_center < bound[2] + 5.0 {  // 5.0 is half bullet width
-                        println!("collision {:?}", bullet_pos);
-                        self.has_collided = true;
-                    }
+        for bullet in bullets.iter() {
+            let bullet_pos = bullet.get_position();
+            for (idx, bound) in asteroid_bounds.iter().enumerate() {
+                let dx = bullet_pos[0] - bound[0];
+                let dy = bullet_pos[1] - bound[1];
+                let c_squared = dx * dx + dy * dy;
+                let dist_to_center = c_squared.sqrt();
+                if dist_to_center < bound[2] + 5.0 {  // 5.0 is half bullet width
+                    println!("collision {:?}", bullet_pos);
+                    self.bullets_to_remove.push(bullet.id);
+                    self.asteroids_to_remove.push(asteroids[idx].id);
                 }
             }
         }
-
     }
 
     fn update(&mut self, args: &UpdateArgs) {
 
         self.cull_expired_bullets();
+        self.cull_collided_objects();
 
         // user input
         if self.button_states.left && !self.button_states.right {
@@ -177,8 +232,7 @@ impl App {
         self.ship.update(args);
 
 
-        if !self.has_collided {
-        // existing asteroids
+            // existing asteroids
             for (_, a) in &mut self.asteroids {
                 a.update(args);
             }
@@ -186,11 +240,8 @@ impl App {
             // existing bullets
             for (_, bullet) in &mut self.bullets {
                 bullet.update(args);
-            
+
             }
-        }
-
-
 
     }
 }
@@ -209,6 +260,9 @@ fn main() {
         .build()
         .unwrap();
 
+
+    let mut rng = rand::thread_rng();
+
     // Create a new game and run it.
     let mut app = App {
         gl: GlGraphics::new(opengl),
@@ -219,6 +273,8 @@ fn main() {
         next_asteroid_id: 0,
         button_states: ButtonStates::new(),
         has_collided: false,
+        bullets_to_remove: vec![],
+        asteroids_to_remove: vec![],
     };
 
     let viewport = Viewport {
@@ -228,7 +284,20 @@ fn main() {
     };
     let c = Context::new_viewport(viewport);
 
-    app.add_asteroids(c.transform);
+    let starting_asteroid = AsteroidStats {
+        transform: c.transform.trans(rng.gen_range(50.0, 412.0), rng.gen_range(50.0, 412.0)),
+        width: 100.0,
+        height: 100.0
+    };
+
+    let starting_asteroid_2 = AsteroidStats {
+        transform: c.transform.trans(rng.gen_range(50.0, 412.0), rng.gen_range(50.0, 412.0)),
+        width: 100.0,
+        height: 100.0
+    };
+
+    app.add_asteroids(&starting_asteroid);
+    app.add_asteroids(&starting_asteroid_2);
 
     let mut events = Events::new(EventSettings::new());
     while let Some(e) = events.next(&mut window) {
